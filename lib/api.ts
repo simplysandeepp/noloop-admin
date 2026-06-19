@@ -48,3 +48,47 @@ export async function authedGet<T>(path: string): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+function parseMessage(data: any, status: number): string {
+  return Array.isArray(data?.message)
+    ? data.message.join(", ")
+    : (data?.message ?? `Request failed (${status})`);
+}
+
+export async function authedPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken() ?? ""}`,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, parseMessage(data, res.status));
+  return data as T;
+}
+
+export async function authedPatch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken() ?? ""}`,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, parseMessage(data, res.status));
+  return data as T;
+}
+
+export async function authedDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, parseMessage(data, res.status));
+  return data as T;
+}

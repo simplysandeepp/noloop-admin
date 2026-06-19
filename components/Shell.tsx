@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, ScrollText, LogOut } from "lucide-react";
+import { LayoutDashboard, UsersRound, ScrollText, LogOut } from "lucide-react";
 import { getToken, clearToken } from "@/lib/api";
 import Logo from "@/components/ui/Logo";
 
@@ -21,6 +21,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const links = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/users", label: "Users", icon: UsersRound },
     { href: "/logs", label: "Logs", icon: ScrollText },
   ];
 

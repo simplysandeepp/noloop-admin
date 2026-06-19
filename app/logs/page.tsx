@@ -18,6 +18,12 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleString();
 }
 
+const ACTION_TINT: Record<string, string> = {
+  ORG_CREATED: "bg-sky-100 text-sky-700",
+  EMPLOYEE_CREATED: "bg-teal-100 text-teal-700",
+  LOGIN: "bg-slate-100 text-slate-500",
+};
+
 export default function LogsPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -39,36 +45,53 @@ export default function LogsPage() {
 
   return (
     <Shell>
-      <h1 className="page-title">Activity logs</h1>
-      <p className="muted">Most recent platform events.</p>
+      <h1 className="text-2xl font-black text-slate-900 tracking-tight">Activity logs</h1>
+      <p className="text-sm text-slate-500 mt-1">Most recent platform events.</p>
 
-      <div className="table-wrap" style={{ marginTop: "1rem" }}>
-        <div className="table-scroll">
-          <table>
+      <div className="mt-6 bg-white border border-sky-100 rounded-2xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
             <thead>
-              <tr>
-                <th>When</th>
-                <th>Action</th>
-                <th>Organization</th>
-                <th>Actor</th>
-                <th>Detail</th>
+              <tr className="bg-slate-50 text-slate-500">
+                {["When", "Action", "Organization", "Actor", "Detail"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left font-semibold text-xs uppercase tracking-wider px-4 py-3 border-b border-slate-100"
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {logs.map((l) => (
-                <tr key={l.id}>
-                  <td className="muted">{fmtDate(l.createdAt)}</td>
-                  <td>
-                    <span className="tag tag-role">{l.action}</span>
+                <tr key={l.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 border-b border-slate-50 text-slate-400 whitespace-nowrap">
+                    {fmtDate(l.createdAt)}
                   </td>
-                  <td>{l.tenant?.name ?? "—"}</td>
-                  <td>{l.actor?.email ?? "system"}</td>
-                  <td className="muted">{l.detail ?? "—"}</td>
+                  <td className="px-4 py-3 border-b border-slate-50">
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        ACTION_TINT[l.action] ?? "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {l.action}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 border-b border-slate-50">
+                    {l.tenant?.name ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 border-b border-slate-50">
+                    {l.actor?.email ?? "system"}
+                  </td>
+                  <td className="px-4 py-3 border-b border-slate-50 text-slate-400">
+                    {l.detail ?? "—"}
+                  </td>
                 </tr>
               ))}
               {logs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
+                  <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                     No activity yet.
                   </td>
                 </tr>
@@ -78,7 +101,11 @@ export default function LogsPage() {
         </div>
       </div>
 
-      {error && <div className="msg msg-error">{error}</div>}
+      {error && (
+        <div className="mt-6 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
+          {error}
+        </div>
+      )}
     </Shell>
   );
 }

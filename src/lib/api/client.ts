@@ -1,18 +1,9 @@
+// Low-level HTTP client for the external NoLoop backend.
 // Talks to the same NoLoop backend as the main app.
+import { getToken } from "./auth";
+
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-
-const TOKEN_KEY = "noloop_admin_token";
-
-export function getToken(): string | null {
-  return typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-}
-export function setToken(t: string) {
-  if (typeof window !== "undefined") localStorage.setItem(TOKEN_KEY, t);
-}
-export function clearToken() {
-  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
-}
 
 export class ApiError extends Error {
   status: number;
@@ -20,6 +11,12 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+function parseMessage(data: any, status: number): string {
+  return Array.isArray(data?.message)
+    ? data.message.join(", ")
+    : (data?.message ?? `Request failed (${status})`);
 }
 
 export async function postJSON<T>(path: string, body: unknown): Promise<T> {
@@ -47,12 +44,6 @@ export async function authedGet<T>(path: string): Promise<T> {
     throw new ApiError(res.status, data?.message ?? `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
-}
-
-function parseMessage(data: any, status: number): string {
-  return Array.isArray(data?.message)
-    ? data.message.join(", ")
-    : (data?.message ?? `Request failed (${status})`);
 }
 
 export async function authedPost<T>(path: string, body?: unknown): Promise<T> {

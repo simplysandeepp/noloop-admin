@@ -2,13 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { postJSON, setToken } from "@/lib/api";
+import { auth, setToken } from "@/lib/api";
 import Logo from "@/components/ui/Logo";
-
-interface LoginResponse {
-  token: string;
-  user: { role: string; name: string | null };
-}
+import ErrorBanner from "@/components/ui/ErrorBanner";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +18,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await postJSON<LoginResponse>("/auth/login", { email, password });
+      const data = await auth.login({ email, password });
       if (data.user.role !== "PLATFORM_ADMIN") {
         setError("This account is not a platform admin.");
         return;
@@ -86,11 +82,7 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
 
-          {error && (
-            <div className="mt-4 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-              {error}
-            </div>
-          )}
+          {error && <ErrorBanner className="mt-4">{error}</ErrorBanner>}
         </form>
       </div>
     </main>

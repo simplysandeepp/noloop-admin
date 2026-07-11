@@ -1,62 +1,28 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Search, KeyRound, X, Ban, RotateCcw, Trash2 } from "lucide-react";
-import Shell from "@/components/Shell";
-import {
-  authedGet,
-  authedPost,
-  authedDelete,
-  ApiError,
-} from "@/lib/api";
-
-interface User {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  status: "ACTIVE" | "REVOKED" | string;
-  createdAt: string;
-  tenant: { id: string; name: string; type: "HOSPITAL" | "INSURER" } | null;
-}
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleString();
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const ok = status === "ACTIVE";
-  return (
-    <span
-      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-        ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-      }`}
-    >
-      {status}
-    </span>
-  );
-}
+import { Search, KeyRound, Ban, RotateCcw, Trash2 } from "lucide-react";
+import Shell from "@/components/layout/Shell";
+import StatusBadge from "@/components/ui/StatusBadge";
+import TypeBadge from "@/components/ui/TypeBadge";
+import CredentialsCard from "@/components/ui/CredentialsCard";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import { admin } from "@/lib/api";
+import { fmtDate } from "@/lib/format";
+import { useAuthRedirect } from "@/hooks/useAuthRedirect";
+import type { User } from "@/types";
 
 export default function UsersPage() {
-  const router = useRouter();
+  const handleAuthError = useAuthRedirect();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [creds, setCreds] = useState<{ email: string; password: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  function handleAuthError(err: unknown): boolean {
-    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-      router.replace("/login");
-      return true;
-    }
-    return false;
-  }
-
   async function load() {
     try {
-      setUsers(await authedGet<User[]>("/admin/users"));
+      setUsers(await admin.listUsers());
     } catch (err) {
       if (handleAuthError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -66,7 +32,7 @@ export default function UsersPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [handleAuthError]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -94,28 +60,26 @@ export default function UsersPage() {
 
   function revoke(u: User) {
     return act(u.id, async () => {
-      await authedPost(`/admin/users/${u.id}/revoke`);
+      await admin.revokeUser(u.id);
       await load();
     });
   }
   function restore(u: User) {
     return act(u.id, async () => {
-      await authedPost(`/admin/users/${u.id}/restore`);
+      await admin.restoreUser(u.id);
       await load();
     });
   }
   function resetPassword(u: User) {
     return act(u.id, async () => {
-      const res = await authedPost<{ credentials: { email: string; password: string } }>(
-        `/admin/users/${u.id}/reset-password`
-      );
+      const res = await admin.resetPassword(u.id);
       setCreds(res.credentials);
     });
   }
   function remove(u: User) {
     if (!window.confirm(`Delete ${u.email}? This cannot be undone.`)) return;
     return act(u.id, async () => {
-      await authedDelete(`/admin/users/${u.id}`);
+      await admin.deleteUser(u.id);
       await load();
     });
   }
@@ -128,36 +92,14 @@ export default function UsersPage() {
       </p>
 
       {creds && (
-        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 text-emerald-800 font-bold">
-              <KeyRound className="w-4 h-4" /> Password reset
-            </div>
-            <button
-              onClick={() => setCreds(null)}
-              className="text-emerald-700 hover:text-emerald-900"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs text-emerald-700 mt-1">
-            Save these now — the password is shown once.
-          </p>
-          <dl className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                Email
-              </dt>
-              <dd className="font-mono text-slate-800 break-all">{creds.email}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                Password
-              </dt>
-              <dd className="font-mono text-slate-800 break-all">{creds.password}</dd>
-            </div>
-          </dl>
-        </div>
+        <CredentialsCard
+          className="mt-4"
+          title="Password reset"
+          email={creds.email}
+          password={creds.password}
+          columns={2}
+          onClose={() => setCreds(null)}
+        />
       )}
 
       <div className="mt-6 relative max-w-sm">
@@ -200,15 +142,7 @@ export default function UsersPage() {
                     {u.tenant ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="text-slate-700">{u.tenant.name}</span>
-                        <span
-                          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            u.tenant.type === "HOSPITAL"
-                              ? "bg-sky-100 text-sky-700"
-                              : "bg-teal-100 text-teal-700"
-                          }`}
-                        >
-                          {u.tenant.type}
-                        </span>
+                        <TypeBadge type={u.tenant.type} />
                       </span>
                     ) : (
                       <span className="text-slate-400">—</span>
@@ -274,11 +208,7 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mt-6 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner className="mt-6">{error}</ErrorBanner>}
     </Shell>
   );
 }

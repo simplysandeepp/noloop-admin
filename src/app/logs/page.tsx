@@ -1,22 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Shell from "@/components/Shell";
-import { authedGet, ApiError } from "@/lib/api";
-
-interface LogEntry {
-  id: string;
-  action: string;
-  detail: string | null;
-  createdAt: string;
-  tenant: { name: string; type: string } | null;
-  actor: { name: string | null; email: string } | null;
-}
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleString();
-}
+import Shell from "@/components/layout/Shell";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import { admin } from "@/lib/api";
+import { fmtDate } from "@/lib/format";
+import { useAuthRedirect } from "@/hooks/useAuthRedirect";
+import type { LogEntry } from "@/types";
 
 const ACTION_TINT: Record<string, string> = {
   ORG_CREATED: "bg-sky-100 text-sky-700",
@@ -25,23 +15,21 @@ const ACTION_TINT: Record<string, string> = {
 };
 
 export default function LogsPage() {
-  const router = useRouter();
+  const handleAuthError = useAuthRedirect();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        setLogs(await authedGet<LogEntry[]>("/admin/logs?limit=200"));
+        setLogs(await admin.listLogs(200));
       } catch (err) {
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-          router.replace("/login");
-        } else {
+        if (!handleAuthError(err)) {
           setError(err instanceof Error ? err.message : "Failed to load");
         }
       }
     })();
-  }, [router]);
+  }, [handleAuthError]);
 
   return (
     <Shell>
@@ -101,11 +89,7 @@ export default function LogsPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mt-6 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner className="mt-6">{error}</ErrorBanner>}
     </Shell>
   );
 }

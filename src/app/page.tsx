@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Building2,
@@ -13,35 +12,15 @@ import {
   ArrowRight,
   Plus,
   X,
-  KeyRound,
 } from "lucide-react";
-import Shell from "@/components/Shell";
-import { authedGet, authedPost, ApiError } from "@/lib/api";
-
-interface Stats {
-  orgs: number;
-  hospitals: number;
-  insurers: number;
-  users: number;
-  claims: number;
-  logs: number;
-}
-interface Org {
-  id: string;
-  name: string;
-  type: "HOSPITAL" | "INSURER";
-  createdAt: string;
-  employeeCount: number;
-}
-interface Credentials {
-  email: string;
-  password: string;
-  role: string;
-}
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleString();
-}
+import Shell from "@/components/layout/Shell";
+import CredentialsCard from "@/components/ui/CredentialsCard";
+import TypeBadge from "@/components/ui/TypeBadge";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import { admin } from "@/lib/api";
+import { fmtDate } from "@/lib/format";
+import { useAuthRedirect } from "@/hooks/useAuthRedirect";
+import type { Credentials, Org, Stats } from "@/types";
 
 const CARDS: { key: keyof Stats; label: string; icon: any; tint: string }[] = [
   { key: "orgs", label: "Organizations", icon: Building2, tint: "text-slate-700" },
@@ -53,7 +32,7 @@ const CARDS: { key: keyof Stats; label: string; icon: any; tint: string }[] = [
 ];
 
 export default function Dashboard() {
-  const router = useRouter();
+  const handleAuthError = useAuthRedirect();
   const [stats, setStats] = useState<Stats | null>(null);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -69,16 +48,11 @@ export default function Dashboard() {
 
   async function load() {
     try {
-      const [s, o] = await Promise.all([
-        authedGet<Stats>("/admin/stats"),
-        authedGet<Org[]>("/admin/orgs"),
-      ]);
+      const [s, o] = await Promise.all([admin.getStats(), admin.listOrgs()]);
       setStats(s);
       setOrgs(o);
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        router.replace("/login");
-      } else {
+      if (!handleAuthError(err)) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
     }
@@ -87,17 +61,14 @@ export default function Dashboard() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [handleAuthError]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setFormError(null);
     try {
-      const res = await authedPost<{
-        tenant: { id: string; name: string; type: string };
-        credentials: Credentials;
-      }>("/admin/orgs", {
+      const res = await admin.createOrg({
         type,
         name: name.trim(),
         adminName: adminName.trim(),
@@ -111,9 +82,7 @@ export default function Dashboard() {
       setType("HOSPITAL");
       await load();
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        router.replace("/login");
-      } else {
+      if (!handleAuthError(err)) {
         setFormError(err instanceof Error ? err.message : "Failed to create");
       }
     } finally {
@@ -156,42 +125,15 @@ export default function Dashboard() {
       </div>
 
       {creds && (
-        <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 text-emerald-800 font-bold">
-              <KeyRound className="w-4 h-4" /> Admin credentials created
-            </div>
-            <button
-              onClick={() => setCreds(null)}
-              className="text-emerald-700 hover:text-emerald-900"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs text-emerald-700 mt-1">
-            Save these now — the password is shown once.
-          </p>
-          <dl className="mt-3 grid sm:grid-cols-3 gap-3 text-sm">
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                Email
-              </dt>
-              <dd className="font-mono text-slate-800 break-all">{creds.email}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                Password
-              </dt>
-              <dd className="font-mono text-slate-800 break-all">{creds.password}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                Role
-              </dt>
-              <dd className="font-mono text-slate-800">{creds.role}</dd>
-            </div>
-          </dl>
-        </div>
+        <CredentialsCard
+          className="mb-4"
+          title="Admin credentials created"
+          email={creds.email}
+          password={creds.password}
+          role={creds.role}
+          columns={3}
+          onClose={() => setCreds(null)}
+        />
       )}
 
       {showForm && (
@@ -247,9 +189,7 @@ export default function Dashboard() {
             />
           </div>
           {formError && (
-            <div className="sm:col-span-2 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-              {formError}
-            </div>
+            <ErrorBanner className="sm:col-span-2">{formError}</ErrorBanner>
           )}
           <div className="sm:col-span-2">
             <button
@@ -285,15 +225,7 @@ export default function Dashboard() {
                     {o.name}
                   </td>
                   <td className="px-4 py-3 border-b border-slate-50">
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        o.type === "HOSPITAL"
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-teal-100 text-teal-700"
-                      }`}
-                    >
-                      {o.type}
-                    </span>
+                    <TypeBadge type={o.type} />
                   </td>
                   <td className="px-4 py-3 border-b border-slate-50">
                     {o.employeeCount}
@@ -323,11 +255,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {error && (
-        <div className="mt-6 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner className="mt-6">{error}</ErrorBanner>}
     </Shell>
   );
 }

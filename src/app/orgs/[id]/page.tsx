@@ -12,56 +12,25 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import Shell from "@/components/Shell";
-import {
-  authedGet,
-  authedPost,
-  authedDelete,
-  ApiError,
-} from "@/lib/api";
+import Shell from "@/components/layout/Shell";
+import StatusBadge from "@/components/ui/StatusBadge";
+import TypeBadge from "@/components/ui/TypeBadge";
+import CredentialsCard from "@/components/ui/CredentialsCard";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import { admin } from "@/lib/api";
+import { fmtDate } from "@/lib/format";
+import { useAuthRedirect } from "@/hooks/useAuthRedirect";
+import type { Employee, OrgDetail, OrgType } from "@/types";
 
-interface Employee {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  status?: "ACTIVE" | "REVOKED" | string;
-  createdAt: string;
-}
-interface OrgDetail {
-  id: string;
-  name: string;
-  type: "HOSPITAL" | "INSURER";
-  createdAt: string;
-  users: Employee[];
-}
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleString();
-}
-
-const ROLES_BY_TYPE: Record<"HOSPITAL" | "INSURER", string[]> = {
+const ROLES_BY_TYPE: Record<OrgType, string[]> = {
   HOSPITAL: ["HOSPITAL_ADMIN", "HOSPITAL_STAFF"],
   INSURER: ["INSURER_ADMIN", "INSURER_ADJUDICATOR"],
 };
 
-function StatusBadge({ status }: { status?: string }) {
-  const s = status ?? "ACTIVE";
-  const ok = s === "ACTIVE";
-  return (
-    <span
-      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-        ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-      }`}
-    >
-      {s}
-    </span>
-  );
-}
-
 export default function OrgDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const handleAuthError = useAuthRedirect();
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -79,17 +48,9 @@ export default function OrgDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  function handleAuthError(err: unknown): boolean {
-    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-      router.replace("/login");
-      return true;
-    }
-    return false;
-  }
-
   async function load() {
     try {
-      setOrg(await authedGet<OrgDetail>(`/admin/orgs/${params.id}`));
+      setOrg(await admin.getOrg(params.id));
     } catch (err) {
       if (handleAuthError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -99,7 +60,7 @@ export default function OrgDetailPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id, router]);
+  }, [params.id, handleAuthError]);
 
   const roleOptions = org ? ROLES_BY_TYPE[org.type] : [];
 
@@ -123,10 +84,7 @@ export default function OrgDetailPage() {
     setSubmitting(true);
     setFormError(null);
     try {
-      const res = await authedPost<{
-        user: { id: string; name: string; role: string };
-        credentials: { email: string; password: string; role: string };
-      }>("/admin/users", {
+      const res = await admin.createUser({
         tenantId: org.id,
         name: name.trim(),
         ...(role ? { role } : {}),
@@ -149,28 +107,26 @@ export default function OrgDetailPage() {
 
   function revoke(u: Employee) {
     return act(u.id, async () => {
-      await authedPost(`/admin/users/${u.id}/revoke`);
+      await admin.revokeUser(u.id);
       await load();
     });
   }
   function restore(u: Employee) {
     return act(u.id, async () => {
-      await authedPost(`/admin/users/${u.id}/restore`);
+      await admin.restoreUser(u.id);
       await load();
     });
   }
   function resetPassword(u: Employee) {
     return act(u.id, async () => {
-      const res = await authedPost<{ credentials: { email: string; password: string } }>(
-        `/admin/users/${u.id}/reset-password`
-      );
+      const res = await admin.resetPassword(u.id);
       setCreds(res.credentials);
     });
   }
   function removeEmployee(u: Employee) {
     if (!window.confirm(`Delete ${u.email}? This cannot be undone.`)) return;
     return act(u.id, async () => {
-      await authedDelete(`/admin/users/${u.id}`);
+      await admin.deleteUser(u.id);
       await load();
     });
   }
@@ -186,7 +142,7 @@ export default function OrgDetailPage() {
     setBusy("org");
     setError(null);
     try {
-      await authedDelete(`/admin/orgs/${org.id}`);
+      await admin.deleteOrg(org.id);
       router.push("/");
     } catch (err) {
       if (!handleAuthError(err)) {
@@ -211,15 +167,7 @@ export default function OrgDetailPage() {
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
               {org.name}
             </h1>
-            <span
-              className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                org.type === "HOSPITAL"
-                  ? "bg-sky-100 text-sky-700"
-                  : "bg-teal-100 text-teal-700"
-              }`}
-            >
-              {org.type}
-            </span>
+            <TypeBadge type={org.type} size="md" />
             <button
               onClick={deleteOrg}
               disabled={busy === "org"}
@@ -231,46 +179,15 @@ export default function OrgDetailPage() {
           <p className="text-sm text-slate-400 mt-1">Created {fmtDate(org.createdAt)}</p>
 
           {creds && (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                  <KeyRound className="w-4 h-4" /> Credentials
-                </div>
-                <button
-                  onClick={() => setCreds(null)}
-                  className="text-emerald-700 hover:text-emerald-900"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <p className="text-xs text-emerald-700 mt-1">
-                Save these now — the password is shown once.
-              </p>
-              <dl className="mt-3 grid sm:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                    Email
-                  </dt>
-                  <dd className="font-mono text-slate-800 break-all">{creds.email}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                    Password
-                  </dt>
-                  <dd className="font-mono text-slate-800 break-all">
-                    {creds.password}
-                  </dd>
-                </div>
-                {creds.role && (
-                  <div>
-                    <dt className="text-xs uppercase tracking-wider text-emerald-600 font-semibold">
-                      Role
-                    </dt>
-                    <dd className="font-mono text-slate-800">{creds.role}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
+            <CredentialsCard
+              className="mt-5"
+              title="Credentials"
+              email={creds.email}
+              password={creds.password}
+              role={creds.role}
+              columns={3}
+              onClose={() => setCreds(null)}
+            />
           )}
 
           <div className="mt-8 mb-3 flex items-center justify-between gap-3 flex-wrap">
@@ -338,9 +255,7 @@ export default function OrgDetailPage() {
                 />
               </div>
               {formError && (
-                <div className="sm:col-span-3 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-                  {formError}
-                </div>
+                <ErrorBanner className="sm:col-span-3">{formError}</ErrorBanner>
               )}
               <div className="sm:col-span-3">
                 <button
@@ -438,11 +353,7 @@ export default function OrgDetailPage() {
         </>
       )}
 
-      {error && (
-        <div className="mt-6 text-sm rounded-xl px-3.5 py-2.5 bg-red-50 text-red-600 border border-red-100">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner className="mt-6">{error}</ErrorBanner>}
     </Shell>
   );
 }

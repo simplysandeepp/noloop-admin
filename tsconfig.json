@@ -15,8 +15,10 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // src/ is a parallel tree from PR #2 that the router ignores (root app/ wins)
+  // and that fails type-check against the root lib; excluded until reconciled.
+  "exclude": ["node_modules", "src"]
 }

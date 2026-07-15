@@ -3,6 +3,12 @@
 Operator dashboard for the NoLoop platform — a Next.js 15 (App Router) frontend for managing
 organizations, users, and viewing activity logs.
 
+**🌐 Live (Vercel):** https://noloop-admin.vercel.app
+
+> ⚠️ The deployed UI can't log in yet — it needs `NEXT_PUBLIC_API_URL` pointed at a deployed
+> backend (tracked in [Noloop#16](https://github.com/simplysandeepp/Noloop/issues/16)). Until the
+> backend is on Render, the live link serves the UI only; use it locally against `:4000` for now.
+
 > The backend is a **separate service** (the same NoLoop API the main app uses). This repo contains
 > only the frontend; it talks to the backend over HTTP via `NEXT_PUBLIC_API_URL`.
 
